@@ -53,10 +53,11 @@
       "typedRoutes": true,
       "reactCompiler": true
     },
+    "owner": "aegiondynamic-org",
     "extra": {
       "router": {},
       "eas": {
-        "projectId": "7e00c914-fbca-4f1d-aacc-cdbbb10beca6"
+        "projectId": "2c0eae45-d891-4efc-920e-28579eb56cf4"
       }
     }
   }
