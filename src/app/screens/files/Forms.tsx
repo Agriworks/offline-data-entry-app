@@ -1,6 +1,6 @@
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   Alert,
@@ -19,8 +19,9 @@ import { getQueue, removeFromQueue } from '../../pendingQueue';
 // import { submitFormData } from '../../../lib/hey-api/client/sdk.gen';
 import { EXPO_PUBLIC_BACKEND_URL } from '@env';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { GoogleSignin } from '@react-native-google-signin/google-signin';
 import axios from 'axios';
-import { getIdToken } from '../../../services/auth/tokenStorage';
+import { clearAuthTokens, getIdToken } from '../../../services/auth/tokenStorage';
 
 type FormsNavigationProp = NativeStackNavigationProp<
   FormStackParamList,
@@ -84,6 +85,44 @@ function Forms() {
       setQueueData([]);
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  // ⭐ Check if submission results have authentication errors
+  const hasAuthenticationErrors = useMemo(() => {
+    return submissionResults.some(
+      r => !r.success && (
+        r.reason?.toLowerCase().includes('authentication') ||
+        r.reason?.toLowerCase().includes('unauthorized') ||
+        r.reason?.toLowerCase().includes('token') ||
+        r.reason?.toLowerCase().includes('session expired') ||
+        r.reason?.toLowerCase().includes('sign in again')
+      )
+    );
+  }, [submissionResults]);
+
+  // ⭐ Handle logout and redirect to login (only clear auth data, keep cache!)
+  const handleAuthErrorLogout = async () => {
+    try {
+      setShowSubmissionSummary(false);
+      
+      // Sign out from Google
+      await GoogleSignin.signOut();
+      
+      // Clear secure tokens (authentication data only)
+      await clearAuthTokens();
+      
+      // Clear ONLY user info (not cache, not pending forms, not doctypes!)
+      await AsyncStorage.removeItem('userInfo');
+      
+      console.log('[Forms] User logged out due to auth error (cache preserved)');
+      
+      // Navigate to Login screen
+      navigation.getParent()?.navigate('Login' as never);
+    } catch (error) {
+      console.error('[Forms] Error during auth error logout:', error);
+      // Force navigate to login anyway
+      navigation.getParent()?.navigate('Login' as never);
     }
   };
 
@@ -254,6 +293,22 @@ function Forms() {
                 setQueueData(updatedQueue);
 
                 setSubmissionResults(processedResults);
+                
+                // ⭐ Check if any failures are due to authentication
+                const hasAuthErrors = processedResults.some(
+                  r => !r.success && (
+                    r.reason?.toLowerCase().includes('authentication') ||
+                    r.reason?.toLowerCase().includes('unauthorized') ||
+                    r.reason?.toLowerCase().includes('token') ||
+                    r.reason?.toLowerCase().includes('session expired')
+                  )
+                );
+                
+                // If auth errors detected, show modal with logout option
+                if (hasAuthErrors) {
+                  console.log('[Forms] Authentication errors detected, user needs to re-login');
+                }
+                
                 setShowSubmissionSummary(true);
               } catch (error: any) {
                 console.error('Unexpected error submitting forms:', error);
@@ -565,14 +620,47 @@ function Forms() {
               </ScrollView>
 
               <View className="mt-4 flex-row justify-end gap-3">
-                <TouchableOpacity
-                  className="items-center justify-center gap-2 rounded-md border border-[#E2E8F0] px-4 py-2 opacity-100"
-                  onPress={() => setShowSubmissionSummary(false)}
-                >
-                  <Text className="font-inter align-middle text-[14px] font-medium leading-[20px] tracking-[-0.006em] text-[#020617]">
-                    {t('common.close')}
-                  </Text>
-                </TouchableOpacity>
+                {hasAuthenticationErrors ? (
+                  <>
+                    <TouchableOpacity
+                      className="items-center justify-center gap-2 rounded-md border px-4 py-2"
+                      style={{ borderColor: theme.border }}
+                      onPress={() => setShowSubmissionSummary(false)}
+                    >
+                      <Text
+                        className="font-inter text-[14px] font-medium"
+                        style={{ color: theme.text }}
+                      >
+                        {t('common.close')}
+                      </Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      className="items-center justify-center rounded-md px-4 py-2"
+                      style={{ backgroundColor: theme.buttonBackground }}
+                      onPress={handleAuthErrorLogout}
+                    >
+                      <Text
+                        className="font-inter text-[14px] font-medium"
+                        style={{ color: theme.buttonText }}
+                      >
+                        Sign Out & Login
+                      </Text>
+                    </TouchableOpacity>
+                  </>
+                ) : (
+                  <TouchableOpacity
+                    className="items-center justify-center gap-2 rounded-md border px-4 py-2"
+                    style={{ borderColor: theme.border }}
+                    onPress={() => setShowSubmissionSummary(false)}
+                  >
+                    <Text
+                      className="font-inter text-[14px] font-medium"
+                      style={{ color: theme.text }}
+                    >
+                      {t('common.close')}
+                    </Text>
+                  </TouchableOpacity>
+                )}
               </View>
             </View>
           </View>

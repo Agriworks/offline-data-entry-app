@@ -1,28 +1,28 @@
-import {
-  View,
-  Text,
-  SafeAreaView,
-  TouchableOpacity,
-  ScrollView,
-  ActivityIndicator,
-} from 'react-native';
-import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
-import { BottomTabsList } from '../../navigation/BottomTabsList';
-import React, { useEffect, useState, useCallback } from 'react';
-import { useTranslation } from 'react-i18next';
-import LanguageControl from '../../components/LanguageControl';
+import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { ArrowRight } from 'lucide-react-native';
-import { HomeStackParamList } from '../../navigation/HomeStackParamList';
+import React, { useCallback, useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
+import {
+  ActivityIndicator,
+  SafeAreaView,
+  ScrollView,
+  Text,
+  TouchableOpacity,
+  View,
+} from 'react-native';
+import { useNetwork } from '../../../context/NetworkProvider';
 import { useTheme } from '../../../context/ThemeContext';
 import { getErpSystems } from '../../../lib/hey-api/client/sdk.gen';
-import { getQueue } from '../../pendingQueue';
-import { useNetwork } from '../../../context/NetworkProvider';
 import {
   loadErpSystemsFromCache,
   saveErpSystemsToCache,
   type ErpSystem,
 } from '../../../services/erpStorage';
+import LanguageControl from '../../components/LanguageControl';
+import { BottomTabsList } from '../../navigation/BottomTabsList';
+import { HomeStackParamList } from '../../navigation/HomeStackParamList';
+import { getQueue } from '../../pendingQueue';
 
 type HomeNavigationProp = BottomTabNavigationProp<BottomTabsList, 'Home'> & {
   navigate: (
@@ -100,112 +100,62 @@ const ERP: React.FC = () => {
       }
       setLoading(true);
 
+      // ⭐ ALWAYS load cached data first (works offline and with expired tokens)
       let cached: ErpSystem[] | null = null;
       try {
         cached = await loadErpSystemsFromCache();
         if (!cancelled && cached && cached.length > 0) {
           setErpSystems(cached);
+          console.log('[Home] Loaded cached ERP systems:', cached.length);
         }
       } catch (error) {
-        console.error('Failed to read cached ERP systems:', error);
+        console.error('[Home] Failed to read cached ERP systems:', error);
       }
 
+      // ⭐ If offline, just use cached data and stop
       if (isConnected === false) {
         if (!cancelled) {
           setLoading(false);
         }
         if (!cached || cached.length === 0) {
-          console.warn('Offline with no cached ERP systems available.');
+          console.warn('[Home] Offline with no cached ERP systems available.');
+        } else {
+          console.log('[Home] Offline mode: Using cached ERP systems');
         }
         return;
       }
 
+      // ⭐ If online, try to fetch fresh data (but keep cached data if it fails)
       try {
+        console.log('[Home] Online: Fetching fresh ERP systems from API...');
         const response = await getErpSystems();
         const systems = normalizeErpSystems(response);
-        if (!cancelled) {
+        if (!cancelled && systems.length > 0) {
           setErpSystems(systems);
+          await saveErpSystemsToCache(systems);
+          console.log('[Home] Fresh ERP systems loaded and cached:', systems.length);
         }
-        await saveErpSystemsToCache(systems);
-        console.log('ERP Systems:', systems);
       } catch (error: any) {
-        console.error('Error fetching ERP systems:', error);
-        // Check for 401 in various error formats
-        const is401Error =
-          error?.response?.status === 401 ||
-          error?.status === 401 ||
-          error?.statusCode === 401 ||
-          (typeof error === 'object' &&
-            'status' in error &&
-            error.status === 401) ||
-          error?.message?.includes('401') ||
-          error?.message?.includes('Unauthorized');
-
-        // If it's a 401 error, try refreshing token and retry once
-        if (is401Error) {
-          try {
-            console.log(
-              '[Home] 401 error detected, refreshing token and retrying...'
-            );
-            const { getIdToken } = await import(
-              '../../../services/auth/tokenStorage'
-            );
-            const refreshedToken = await getIdToken({ forceRefresh: true });
-            if (refreshedToken) {
-              // Wait a bit to ensure token is saved
-              await new Promise(resolve => setTimeout(resolve, 100));
-              // Retry the request - the API client should handle it, but we can also retry here
-              const retryResponse = await getErpSystems();
-              const systems = normalizeErpSystems(retryResponse);
-              if (!cancelled) {
-                setErpSystems(systems);
-              }
-              await saveErpSystemsToCache(systems);
-              console.log(
-                '[Home] ERP Systems loaded successfully after token refresh'
-              );
+        console.error('[Home] Error fetching ERP systems from API:', error);
+        
+        // ⭐ DON'T try to refresh tokens - just use cached data
+        // This prevents crashes and works with expired tokens
+        console.log('[Home] API failed, keeping cached ERP systems');
+        
+        // Ensure cached data is still displayed
+        if (!cancelled) {
+          if (cached && cached.length > 0) {
+            setErpSystems(cached);
+            console.log('[Home] Using cached ERP systems (API failed)');
+          } else {
+            // Try loading cache one more time
+            const fallback = await loadErpSystemsFromCache();
+            if (fallback && fallback.length > 0) {
+              setErpSystems(fallback);
+              console.log('[Home] Using fallback cached ERP systems');
             } else {
-              throw new Error('Failed to refresh authentication token');
-            }
-          } catch (retryError: any) {
-            console.error(
-              '[Home] Error retrying ERP systems fetch after token refresh:',
-              retryError
-            );
-            // Fall back to cached data
-            if (!cancelled) {
-              if (cached && cached.length > 0) {
-                setErpSystems(cached);
-                console.log(
-                  '[Home] Using cached ERP systems due to retry failure'
-                );
-              } else {
-                const fallback = await loadErpSystemsFromCache();
-                if (fallback && fallback.length > 0) {
-                  setErpSystems(fallback);
-                  console.log('[Home] Using fallback cached ERP systems');
-                } else {
-                  setErpSystems([]);
-                  console.warn('[Home] No cached ERP systems available');
-                }
-              }
-            }
-          }
-        } else {
-          // For non-401 errors, use cached data if available
-          if (!cancelled) {
-            if (cached && cached.length > 0) {
-              setErpSystems(cached);
-              console.log(
-                '[Home] Using cached ERP systems due to non-401 error'
-              );
-            } else {
-              const fallback = await loadErpSystemsFromCache();
-              if (fallback && fallback.length > 0) {
-                setErpSystems(fallback);
-              } else {
-                setErpSystems([]);
-              }
+              setErpSystems([]);
+              console.warn('[Home] No cached ERP systems available');
             }
           }
         }
