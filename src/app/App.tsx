@@ -1,4 +1,5 @@
 import { GOOGLE_WEB_CLIENT_ID } from '@env';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import NetInfo from '@react-native-community/netinfo';
 import { GoogleSignin } from '@react-native-google-signin/google-signin';
 import { NavigationContainer } from '@react-navigation/native';
@@ -12,6 +13,7 @@ import { NetworkProvider } from '../context/NetworkProvider';
 import { ThemeProvider, useTheme } from '../context/ThemeContext';
 import '../i18n';
 import {
+  clearAuthTokens,
   getAuthTokens,
   refreshAuthTokens,
 } from '../services/auth/tokenStorage';
@@ -40,6 +42,32 @@ function AppContent(): React.JSX.Element {
 
     const checkAuthState = async () => {
       try {
+        // ⭐ CRITICAL: Check if this is first launch after fresh install
+        // This prevents stale data from previous uninstalls
+        const hasLaunchedBefore = await AsyncStorage.getItem('hasLaunchedBefore');
+        
+        if (hasLaunchedBefore === null) {
+          console.log('[App] First launch detected - clearing any stale data from previous install');
+          
+          // Clear ALL data (in case of reinstall with stale data)
+          try {
+            await AsyncStorage.clear();
+            await clearAuthTokens();
+            await GoogleSignin.signOut().catch(() => {});
+          } catch (e) {
+            console.log('[App] Error clearing stale data:', e);
+          }
+          
+          // Mark that app has been launched
+          await AsyncStorage.setItem('hasLaunchedBefore', 'true');
+          console.log('[App] First launch cleanup complete');
+          
+          // Fresh install always shows login
+          setInitialRoute('Login');
+          setIsLoading(false);
+          return;
+        }
+
         const storedTokens = await getAuthTokens();
 
         if (storedTokens?.idToken) {
