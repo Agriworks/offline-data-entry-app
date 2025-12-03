@@ -1,4 +1,6 @@
 import { GOOGLE_WEB_CLIENT_ID } from '@env';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import NetInfo from '@react-native-community/netinfo';
 import { GoogleSignin } from '@react-native-google-signin/google-signin';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
@@ -11,6 +13,7 @@ import { NetworkProvider } from '../context/NetworkProvider';
 import { ThemeProvider, useTheme } from '../context/ThemeContext';
 import '../i18n';
 import {
+  clearAuthTokens,
   getAuthTokens,
   refreshAuthTokens,
 } from '../services/auth/tokenStorage';
@@ -39,29 +42,68 @@ function AppContent(): React.JSX.Element {
 
     const checkAuthState = async () => {
       try {
-        const storedTokens = await getAuthTokens();
-        const hasPreviousSignIn = await GoogleSignin.hasPreviousSignIn();
-
-        if (storedTokens?.idToken || hasPreviousSignIn) {
-          // Always try to refresh tokens on startup to ensure they're valid
+        // ⭐ CRITICAL: Check if this is first launch after fresh install
+        // This prevents stale data from previous uninstalls
+        const hasLaunchedBefore = await AsyncStorage.getItem('hasLaunchedBefore');
+        
+        if (hasLaunchedBefore === null) {
+          console.log('[App] First launch detected - clearing any stale data from previous install');
+          
+          // Clear ALL data (in case of reinstall with stale data)
           try {
-            console.log('[App] Refreshing tokens on startup...');
-            await refreshAuthTokens();
-            console.log('[App] Tokens refreshed successfully');
-            setInitialRoute('MainApp');
-          } catch (tokenError) {
-            console.error(
-              '[App] Failed to refresh tokens on startup:',
-              tokenError
-            );
-            // If we have stored tokens, still allow access (they might work)
-            // But if refresh fails and no stored tokens, go to login
-            if (storedTokens?.idToken) {
-              console.log('[App] Using stored tokens despite refresh failure');
+            await AsyncStorage.clear();
+            await clearAuthTokens();
+            await GoogleSignin.signOut().catch(() => {});
+          } catch (e) {
+            console.log('[App] Error clearing stale data:', e);
+          }
+          
+          // Mark that app has been launched
+          await AsyncStorage.setItem('hasLaunchedBefore', 'true');
+          console.log('[App] First launch cleanup complete');
+          
+          // Fresh install always shows login
+          setInitialRoute('Login');
+          setIsLoading(false);
+          return;
+        }
+
+        const storedTokens = await getAuthTokens();
+
+        if (storedTokens?.idToken) {
+          // Check network connectivity
+          const networkState = await NetInfo.fetch();
+          const isOnline = networkState.isConnected;
+
+          console.log('[App] Network status:', isOnline ? 'Online' : 'Offline');
+
+          // If online, try to refresh tokens to ensure they're valid
+          if (isOnline) {
+            try {
+              console.log('[App] Refreshing tokens on startup...');
+              await refreshAuthTokens();
+              console.log('[App] Tokens refreshed successfully');
               setInitialRoute('MainApp');
-            } else {
-              setInitialRoute('Login');
+            } catch (tokenError) {
+              console.error(
+                '[App] Failed to refresh tokens on startup:',
+                tokenError
+              );
+              // Check if it's a session expired error
+              const errorMessage = (tokenError as Error)?.message || '';
+              if (errorMessage.includes('SESSION_EXPIRED')) {
+                console.log('[App] Session expired, require re-login');
+                setInitialRoute('Login');
+              } else {
+                // Network or other error while online - still try to use cached tokens
+                console.log('[App] Token refresh failed but allowing access with cached tokens');
+                setInitialRoute('MainApp');
+              }
             }
+          } else {
+            // Offline mode: Allow access with stored tokens
+            console.log('[App] Offline mode: Using cached tokens to allow app access');
+            setInitialRoute('MainApp');
           }
           return;
         }
