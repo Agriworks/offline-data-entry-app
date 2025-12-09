@@ -1,37 +1,37 @@
-import {
-  View,
-  Text,
-  TouchableOpacity,
-  TextInput,
-  ScrollView,
-  Modal,
-  Alert,
-} from 'react-native';
-import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { HomeStackParamList } from '@/app/navigation/HomeStackParamList';
 import { RootStackParamList } from '@/app/navigation/RootStackedList';
-import { RouteProp, useRoute } from '@react-navigation/native';
-import { useNetwork } from '../../../context/NetworkProvider';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { enqueue } from '../../pendingQueue';
+import { RouteProp, useRoute } from '@react-navigation/native';
+import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { ArrowLeft } from 'lucide-react-native';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
+import {
+  Alert,
+  Modal,
+  ScrollView,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+} from 'react-native';
+import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import {
   ensureDoctypeGraph,
-  getDocTypeFromLocal,
   extractFields,
+  getDocTypeFromLocal,
 } from '../../../api';
-import { RawField } from '../../../types';
-import { useTranslation } from 'react-i18next';
-import LanguageControl from '../../components/LanguageControl';
-import SelectDropdown from '../../components/SelectDropdown';
-import LinkDropdown from '../../components/LinkDropdown';
-import DatePicker from '../../components/DatePicker';
-import TableField from '../../components/TableField';
-import generateSchemaHash from '../../../helper/hashFunction';
-import { ArrowLeft } from 'lucide-react-native';
-import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view';
-import { HomeStackParamList } from '@/app/navigation/HomeStackParamList';
+import { useNetwork } from '../../../context/NetworkProvider';
 import { useTheme } from '../../../context/ThemeContext';
+import generateSchemaHash from '../../../helper/hashFunction';
+import { RawField } from '../../../types';
+import DatePicker from '../../components/DatePicker';
+import LanguageControl from '../../components/LanguageControl';
+import LinkDropdown from '../../components/LinkDropdown';
+import SelectDropdown from '../../components/SelectDropdown';
+import TableField from '../../components/TableField';
+import { enqueue } from '../../pendingQueue';
 
 type FormDetailRouteProp = RouteProp<HomeStackParamList, 'FormDetail'>;
 type FormDetailNavigationProp = NativeStackNavigationProp<
@@ -170,7 +170,7 @@ const FormDetail: React.FC<Props> = ({ navigation }) => {
       data: formData,
       schemaHash,
       status: 'pending' as 'pending' | 'submitted' | 'failed',
-      is_submittable: doctype.data.is_submittable,
+      is_submittable: doctype.data?.is_submittable ?? 0,
     };
 
     setLoading(true);
@@ -183,7 +183,8 @@ const FormDetail: React.FC<Props> = ({ navigation }) => {
       setTimeout(() => {
         navigation.goBack();
       }, 100);
-    } catch (e) {
+    } catch (error) {
+      console.error('Error submitting form:', error);
       Alert.alert(t('common.error'), t('formDetail.errorSaving'));
       isSubmittedRef.current = false;
     } finally {
