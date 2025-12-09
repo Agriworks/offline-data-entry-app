@@ -300,6 +300,13 @@ export async function getAllDoctypesFromLocal(): Promise<
     }
     const parsed = parseJson<StoredDoctype>(value);
     if (parsed?.payload) {
+      // Validate that payload has the expected structure
+      if (!parsed.payload.data) {
+        return;
+      }
+      if (!parsed.payload.fields) {
+        return;
+      }
       result[normalizeDoctypeName(parsed.name)] = parsed.payload;
     }
   });
@@ -352,6 +359,7 @@ const defaultFetcher = async (name: string): Promise<DocType> => {
   const response = await getDoctypeByName({
     path: { form_name: name },
   });
+  
   const data =
     (response as any)?.data?.data ??
     (response as any)?.data ??
@@ -359,6 +367,42 @@ const defaultFetcher = async (name: string): Promise<DocType> => {
   if (!data) {
     throw new Error(`Doctype response missing data for ${name}`);
   }
+  
+  // Validate that we have fields array
+  if (!data.fields || !Array.isArray(data.fields)) {
+    throw new Error(`Invalid doctype structure for ${name}: missing fields array`);
+  }
+  
+  // Check if data object exists, if not try to create it from top-level properties
+  if (!data.data || typeof data.data !== 'object') {
+    // Look for doctype metadata at the top level
+    const doctypeMetadata: any = {};
+    const metadataFields = [
+      'name', 'creation', 'modified', 'modified_by', 'owner', 'docStatus',
+      'idx', 'issingle', 'istable', 'editable_grid', 'track_changes', 'module',
+      'autoname', 'name_case', 'sort_field', 'sort_order', 'readonly', 'in_create',
+      'allow_copy', 'allow_rename', 'allow_import', 'hide_toolbar', 'track_seen',
+      'max_attachments', 'document_type', 'engine', 'is_submittable',
+      'show_name_in_global_search', 'custom', 'beta', 'has_web_view',
+      'allow_guest_to_view', 'qick_entry', 'is_tree', 'track_views',
+      'all_events_in_timeline', 'allow_auto_repeat', 'show_preview_popup',
+      'email_append_to', 'index_web_pages_for_search', 'docType'
+    ];
+    
+    metadataFields.forEach(field => {
+      if (data[field] !== undefined) {
+        doctypeMetadata[field] = data[field];
+      }
+    });
+    
+    // If we found metadata, create the nested structure
+    if (Object.keys(doctypeMetadata).length > 0) {
+      data.data = doctypeMetadata;
+    } else {
+      throw new Error(`Invalid doctype structure for ${name}: missing data object`);
+    }
+  }
+  
   return data as DocType;
 };
 

@@ -190,9 +190,8 @@ const FormDetail: React.FC<Props> = ({ navigation }) => {
       data: formData,
       schemaHash,
       status: 'pending' as 'pending' | 'submitted' | 'failed',
-      is_submittable: doctype.data?.is_submittable ?? 0,
+      is_submittable: doctype.data.is_submittable 
     };
-
     setLoading(true);
     setConfirmModalVisible(false);
     try {
