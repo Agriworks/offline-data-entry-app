@@ -7,6 +7,7 @@ export interface SubmissionItem {
   data: Record<string, any>;
   schemaHash: string;
   status: 'pending' | 'submitted' | 'failed';
+  is_submittable: number;
 }
 export type RawField = {
   fieldname: string;
