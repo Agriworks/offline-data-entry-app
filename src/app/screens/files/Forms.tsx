@@ -579,9 +579,21 @@ function Forms() {
           visible={showSubmissionSummary}
           onRequestClose={() => setShowSubmissionSummary(false)}
         >
-          <View className="flex-1 items-center justify-center bg-[#00000033] p-[1.25rem]">
-            <View className="w-full max-w-[400px] gap-4 rounded-[6px] border border-[#E2E8F0] bg-white p-6 opacity-100">
-              <Text className="font-inter text-[18px] font-semibold leading-[28px] tracking-[-0.006em] text-[#020617]">
+          <View
+            className="flex-1 items-center justify-center p-[1.25rem]"
+            style={{ backgroundColor: theme.modalOverlay }}
+          >
+            <View
+              className="w-full max-w-[400px] gap-4 rounded-[6px] border p-6 opacity-100"
+              style={{
+                backgroundColor: theme.modalBackground,
+                borderColor: theme.border,
+              }}
+            >
+              <Text
+                className="font-inter text-[18px] font-semibold leading-[28px] tracking-[-0.006em]"
+                style={{ color: theme.text }}
+              >
                 {t('formsScreen.submissionSummaryTitle')}
               </Text>
               {/* output for error */}
