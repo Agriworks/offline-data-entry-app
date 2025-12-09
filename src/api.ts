@@ -1,6 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { DocType, Field, FormItem, RawField } from './types';
 import { getDoctypeByName, getLinkOptions } from './lib/hey-api/client/sdk.gen';
+import { DocType, Field, FormItem, RawField } from './types';
 
 const DOCTYPE_PREFIX = 'doctype:';
 const DOCTYPE_INDEX_KEY = 'doctypeIndex';
@@ -593,6 +593,7 @@ export function extractFields(docType: DocType): RawField[] {
     hidden: field.hidden,
     print_hide: field.print_hide,
     report_hide: field.report_hide,
+    depends_on: field.depends_on,
   }));
 }
 

@@ -1,6 +1,6 @@
-import React from 'react';
-import { View, Text, TouchableOpacity, ScrollView } from 'react-native';
 import { ChevronDown } from 'lucide-react-native';
+import React, { useEffect } from 'react';
+import { ScrollView, Text, TouchableOpacity, View } from 'react-native';
 import { useTheme } from '../../context/ThemeContext';
 
 interface SelectDropdownProps {
@@ -11,6 +11,8 @@ interface SelectDropdownProps {
   isOpen: boolean;
   onToggle: () => void;
   containerZIndex?: number;
+  dependsOn?: string;
+  formData?: Record<string, any>;
 }
 
 const SelectDropdown: React.FC<SelectDropdownProps> = ({
@@ -21,6 +23,8 @@ const SelectDropdown: React.FC<SelectDropdownProps> = ({
   isOpen,
   onToggle,
   containerZIndex,
+  dependsOn,
+  formData,
 }) => {
   const { theme } = useTheme();
 
@@ -51,6 +55,31 @@ const SelectDropdown: React.FC<SelectDropdownProps> = ({
     maxHeight: 250,
   };
 
+  // 🔥 Compute disabled state
+  const isDisabled = React.useMemo(() => {
+    if (!dependsOn) return false;
+
+    if (dependsOn.startsWith('eval:doc.')) {
+      const regex = /^eval:doc\.([a-zA-Z0-9_]+)\s*==\s*["'](.+)["']$/;
+      const match = dependsOn.match(regex);
+
+      if (match && formData) {
+        const [_, fieldName, expectedValue] = match;
+        return formData[fieldName] !== expectedValue;
+      }
+      return true;
+    }
+
+    return false;
+  }, [dependsOn, formData]);
+
+  // 🔄 Reset value when it becomes disabled
+  useEffect(() => {
+    if (isDisabled && value !== "") {
+      onValueChange("");
+    }
+  }, [isDisabled, value]);
+
   return (
     <View style={containerStyle}>
       {/* Dropdown Toggle Button */}
@@ -58,18 +87,22 @@ const SelectDropdown: React.FC<SelectDropdownProps> = ({
         className="h-[40px] w-full flex-row items-center justify-between rounded-md border px-3"
         style={{
           borderColor: theme.border,
-          backgroundColor: theme.background,
+          backgroundColor: isDisabled ? '#373737ff' : theme.background,
+          opacity: isDisabled ? 0.5 : 1,
         }}
-        onPress={onToggle}
+        onPress={() => {
+          if (!isDisabled) onToggle(); // prevent opening when disabled
+        }}
       >
         <Text
           className="flex-1"
           style={{
-            color: value ? theme.text : theme.subtext,
+            color: isDisabled ? theme.subtext : (value ? theme.text : theme.subtext),
           }}
         >
           {value || placeholder}
         </Text>
+
         <ChevronDown
           size={16}
           color={theme.subtext}
@@ -79,18 +112,15 @@ const SelectDropdown: React.FC<SelectDropdownProps> = ({
         />
       </TouchableOpacity>
 
-      {/* Dropdown Options */}
+      {/* Dropdown Options - Always render structure, only open if isOpen */}
       {isOpen && (
         <View style={dropdownStyle}>
-          {/* Options List */}
           <ScrollView nestedScrollEnabled={true} style={scrollViewStyle}>
             {options.length > 0 ? (
               options.map((option: string, optIndex: number) => {
                 const trimmedOption = option.trim();
                 const isSelected = value === trimmedOption;
-                const fontWeight = isSelected
-                  ? ('600' as const)
-                  : ('normal' as const);
+
                 return (
                   <TouchableOpacity
                     key={optIndex}
@@ -100,18 +130,16 @@ const SelectDropdown: React.FC<SelectDropdownProps> = ({
                         ? theme.dropdownSelectedBg
                         : theme.dropdownBg,
                       borderBottomColor:
-                        optIndex < options.length - 1
-                          ? theme.border
-                          : undefined,
+                        optIndex < options.length - 1 ? theme.border : undefined,
                     }}
                     onPress={() => {
-                      onValueChange(trimmedOption);
+                      if (!isDisabled) onValueChange(trimmedOption);
                     }}
                   >
                     <Text
                       style={{
                         color: theme.text,
-                        fontWeight,
+                        fontWeight: isSelected ? '600' : 'normal',
                       }}
                     >
                       {trimmedOption}
